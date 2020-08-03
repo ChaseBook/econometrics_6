@@ -1,0 +1,373 @@
+---
+title: "Econometrics Assignment 6"
+author: "Chase Bookin & Cole Price"
+date: "August 2, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidycensus)
+library(ggthemes)
+library(ggplot2)
+library(janitor)
+library(dplyr)
+library(gt)
+library(readxl)
+library(sf)
+library(scales)
+library(magrittr)
+library(haven)
+library(infer)
+library(Lahman)
+library(xml2)
+library(rvest)
+library(devtools)
+library(broom)
+library(retrosheet)
+library(skimr)
+library(knitr)
+library(tinytex)
+library(lubridate)
+library(pander)
+library(foreign)
+library(lmtest)
+library(sandwich)
+library(stargazer)
+library(huxtable)
+library(GGally)
+library(gridExtra)
+library(cowplot)
+```
+
+```{r, echo=FALSE}
+
+women_base <- read_xlsx("women.xlsx")
+
+women <- read_xlsx("women.xlsx") %>% 
+  rename(
+    'institution' = `Institution Name`,
+    'ranking' = Academic_ranking,
+    'faculty_total' = Faculty_total,
+    'faculty_female' = Faculty_female,
+    'faculty_male' = `Faculty _male`,
+    'faculty_econ' = EconFaculty_total,
+    'faculty_econ_female' = EconFaculty_female,
+    'faculty_econ_male' = EconFaculty_male,
+    'freshmen' = Freshmen_total,
+    'freshmen_male' = Freshmen_male,
+    'freshmen_female' = Freshmen_female,
+    'freshmen_econ' = FreshmenEcon_total,
+    'freshmen_ec_female' =  FreshmenEcon_female,
+    'freshmen_ec_male' = FreshmenEcon_male,
+    'econ_degrees' = EconDegreesGranted_total,
+    'econ_degrees_female' = EconDegreesGranted_female,
+    'econ_degrees_male' = EconDegreesGranted_males,
+    'stem_degrees' = StemDegreesGranted_total,
+    'stem_degrees_female' = StemDegreesGranted_female,
+    'stem_degrees_male' = StemDegreesGranted_male,
+    'student_faculty' = Student_faculty_ratio,
+    'sat_math_75' = SATMath75_Freshmen_average,
+    'acceptance_rate' = AcceptanceRate_NumberAdmits_divided_by_NumberApplicants,
+    'yield' = StudentYield_total_PercentOfAdmitsThatAreStillEnrolled,
+    'yield_female' = StudentYield_female,
+    'yield_male' = StudentYield_male,
+    'avg_prof_salary' = ProfSalary_average
+  ) %>% 
+  mutate(
+    fac_pct_female = faculty_female / (faculty_female + faculty_male),
+    econ_fac_pct_female = faculty_econ_female / (faculty_econ_female + faculty_econ_male),
+    fresh_ec_pct_female = freshmen_ec_female / (freshmen_ec_female + freshmen_ec_male),
+    degree_ec_pct_female = econ_degrees_female / (econ_degrees_female + econ_degrees_male),
+    fresh_pct_female = freshmen_female / freshmen
+  )
+
+women_summary <- women_base %>% 
+  rename(
+    'Institution' = `Institution Name`,
+    'Ranking' = Academic_ranking,
+    'Total Faculty' = Faculty_total,
+    'Female Faculty' = Faculty_female,
+    'Male Faculty' = `Faculty _male`,
+    'Econ Faculty' = EconFaculty_total,
+    'Econ Fac Female' = EconFaculty_female,
+    'Econ Fac Male' = EconFaculty_male,
+    'Freshmen' = Freshmen_total,
+    'Freshmen Male' = Freshmen_male,
+    'Freshmen Female' = Freshmen_female,
+    'Fresh Econ' = FreshmenEcon_total,
+    'Fresh Ec Female' =  FreshmenEcon_female,
+    'Fresh Ec Male' = FreshmenEcon_male,
+    'Econ Degrees' = EconDegreesGranted_total,
+    'Econ Degrees Female' = EconDegreesGranted_female,
+    'Econ Degrees Male' = EconDegreesGranted_males,
+    'STEM Degrees' = StemDegreesGranted_total,
+    'STEM Degrees Female' = StemDegreesGranted_female,
+    'STEM Degrees Male' = StemDegreesGranted_male,
+    'Student / Faculty' = Student_faculty_ratio,
+    'SAT Math 75th' = SATMath75_Freshmen_average,
+    'Acceptance Rate' = AcceptanceRate_NumberAdmits_divided_by_NumberApplicants,
+    'Acceptance Yield' = StudentYield_total_PercentOfAdmitsThatAreStillEnrolled,
+    'Female Yield' = StudentYield_female,
+    'Male Yield' = StudentYield_male,
+    'Avg Prof Salary' = ProfSalary_average
+  )
+
+```
+
+
+```{r, echo=FALSE}
+skim_without_charts(women_summary) %>% 
+  select(-n_missing, -complete_rate)
+```
+  
+Data from IPEDS through the National Center for Education Statistics  
+  
+```{r, echo=FALSE, warning=FALSE}
+
+# Histogram of percentage of female faculty
+
+zappers <- women %>%
+  summarize(
+    mean_fac_female = mean(fac_pct_female),
+    mean_ec_fac_female = mean(econ_fac_pct_female),
+    mean_ec_fresh_female = mean(fresh_ec_pct_female),
+    mean_ec_degree_female = mean(degree_ec_pct_female)
+  )
+  
+women %>%
+  ggplot(aes(fac_pct_female)) +
+  geom_histogram(binwidth = .02, fill = "dodgerblue3", color = 'white') +
+  theme_economist() +
+  scale_x_continuous(limits = c(0.2, 0.6), breaks = c(0.2, 0.24, 0.28, 0.32, 0.36, 0.4, 0.44,
+                                                      0.48, 0.52, 0.56, .6)) +
+  labs(
+    x = "Percentage of Female Faculty",
+    y = "Frequency",
+    title = "Distribution of the Percentage of Female Faculty",
+    subtitle = "Data from IPEDS - 98 Total Institutions; Each bin has a width of 4%"
+  ) +
+  geom_vline(xintercept = 0.393, linetype = "longdash", color = "black") +
+  annotate("text", x = .5, y = 22, label = "Mean Female Faculty Percent: 0.393")
+
+```
+  
+```{r, echo=FALSE, warning=FALSE}
+women %>%
+  ggplot(aes(econ_fac_pct_female)) +
+  geom_histogram(binwidth = .025, fill = "dodgerblue3", color = 'white') +
+  theme_economist() +
+  scale_x_continuous(limits = c(0, 0.5), breaks = c(0, 0.05, 0.1, 0.15, 0.2, 0.25,
+                                                    0.3, 0.35, 0.4, 0.45, 0.5)) +
+  labs(
+    x = "Percentage of Female Economics Faculty",
+    y = "Frequency",
+    title = "Distribution of the Percentage of Female Economics Faculty",
+    subtitle = "Data from IPEDS - 98 Total Institutions; Each bin has a width of 2.5%"
+  ) +
+  geom_vline(xintercept = 0.226, linetype = "longdash", color = "black") +
+  annotate("text", x = .37, y = 16, label = "Mean Female Economics Faculty %: 0.226")
+```
+  
+
+```{r, include=FALSE}
+women %>%
+  arrange(desc(degree_ec_pct_female))%>% 
+  select(institution, degree_ec_pct_female)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+women %>%
+  ggplot(aes(fresh_ec_pct_female)) +
+  geom_histogram(binwidth = .025, fill = "dodgerblue3", color = 'white') +
+  theme_economist() +
+  scale_x_continuous(limits = c(-.025, 0.6), breaks = c(0, 0.05, 0.1, 0.15, 0.2, 0.25,
+                                                    0.3, 0.35, 0.4, 0.45, 0.5, .55, .6)) +
+  labs(
+    x = "Percentage of Female Economics Freshmen",
+    y = "Frequency",
+    title = "Distribution of the Percentage of Female Economics Freshmen",
+    subtitle = "Data from IPEDS - 98 Total Institutions; Each bin has a width of 2.5%"
+  ) +
+  geom_vline(xintercept = 0.30, linetype = "longdash", color = "black") +
+  annotate("text", x = .11, y = 21, label = "Mean Female Economics Freshmen %: 0.30")
+```
+  
+```{r, echo=FALSE, warning=FALSE}
+women %>%
+  ggplot(aes(degree_ec_pct_female)) +
+  geom_histogram(binwidth = .025, fill = "dodgerblue3", color = 'white') +
+  theme_economist() +
+  scale_x_continuous(limits = c(-.025, 0.6), breaks = c(0, 0.05, 0.1, 0.15, 0.2, 0.25,
+                                                    0.3, 0.35, 0.4, 0.45, 0.5, .55, .6)) +
+  labs(
+    x = "Percentage of Female Economics Graduates",
+    y = "Frequency",
+    title = "Distribution of the Percentage of Female Economics Degrees",
+    subtitle = "Data from IPEDS - 98 Total Institutions; Each bin has a width of 2.5%"
+  ) +
+  geom_vline(xintercept = 0.29, linetype = "longdash", color = "black") +
+  annotate("text", x = .10, y = 16, label = "Mean Female Economics Graduates %: 0.29")
+```
+  
+```{r, echo=FALSE, message=FALSE}
+women_log <- women %>%
+  mutate(ln_faculty_econ_female = log(faculty_econ_female),
+         ln_econ_degrees_female = log(econ_degrees_female))
+
+women_log %>% 
+  rename(
+    'ln_fac_fem_ec' = ln_faculty_econ_female,
+    'ln_deg_fem_ec' = ln_econ_degrees_female,
+    'fac_fem_ec' = faculty_econ_female,
+    'deg_fem_ec' = econ_degrees_female
+  ) %>% 
+  select(fac_fem_ec, ln_fac_fem_ec, deg_fem_ec, ln_deg_fem_ec) %>% 
+  ggpairs(
+  ., 
+  title = "Scatter Matrix of (Log) Female Econ Faculty and (Log) Female Econ Degrees",
+  lower = list(continuous = wrap("points", alpha = 0.3,    size=0.1, color = "dodgerblue4"), 
+              combo = wrap("dot", alpha = 0.4,            size=0.2) )
+)
+```
+  
+```{r, echo=FALSE, message=FALSE}
+
+ggplot(women_log, aes(ranking, faculty_econ_female)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_economist() + 
+  scale_y_continuous(limits = c(0,20)) +
+  labs(
+    x = "Economics Department Ranking",
+    y = "Number of Female Economics Faculty",
+    title = "Econ Department Rank vs. Female Economics Faculty",
+    subtitle = "Data from IPEDS - 98 Total Institutions"
+  )
+  
+
+```
+
+```{r, echo=FALSE, message=FALSE}
+ggplot(women_log, aes(ranking, econ_fac_pct_female)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_economist() + 
+  scale_y_continuous() +
+  labs(
+    x = "Economics Department Ranking",
+    y = "Total Economics Faculty",
+    title = "Econ Department Rank vs. Total Economics Faculty",
+    subtitle = "Data from IPEDS - 98 Total Institutions"
+  )
+```
+
+
+```{r, echo=FALSE}
+
+model1 <- lm(ln_econ_degrees_female ~ ln_faculty_econ_female, data = women_log)
+model1_tidy <- model1 %>%
+  tidy(conf.int = TRUE)
+
+model2 <- lm(ln_econ_degrees_female ~ faculty_econ_female, data = women_log)
+model2_tidy <- model2 %>%
+  tidy(conf.int = TRUE)
+
+model3 <- lm(ln_econ_degrees_female ~ faculty_econ_female + log(freshmen), data = women_log)
+model3_tidy <- model3 %>%
+  tidy(conf.int = TRUE)
+
+model4 <- lm(ln_econ_degrees_female ~ faculty_econ_female + log(freshmen) + ranking, data = women_log)
+model4_tidy <- model4 %>%
+  tidy(conf.int = TRUE)
+
+model5 <- lm(ln_econ_degrees_female ~ faculty_econ_female + log(freshmen) + ranking + acceptance_rate + avg_prof_salary, data = women_log)
+model5_tidy <- model5 %>%
+  tidy(conf.int = TRUE)
+
+stargazer(model5, type = "text")
+
+```
+
+```{r}
+model1p <- lm(degree_ec_pct_female ~ ln_faculty_econ_female, data = women_log)
+model1p_tidy <- model1p %>%
+  tidy(conf.int = TRUE)
+
+model2p <- lm(degree_ec_pct_female ~ faculty_econ_female, data = women_log)
+model2p_tidy <- model2p %>%
+  tidy(conf.int = TRUE)
+
+model3p <- lm(degree_ec_pct_female ~ econ_fac_pct_female, data = women_log)
+model3p_tidy <- model3p %>%
+  tidy(conf.int = TRUE)
+
+model4p <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking, data = women_log)
+model4p_tidy <- model4p %>%
+  tidy(conf.int = TRUE)
+
+model5p <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + freshmen + student_faculty, data = women_log)
+model5p_tidy <- model5p %>%
+  tidy(conf.int = TRUE)
+
+model6p <- lm(degree_ec_pct_female ~ econ_fac_pct_female + fresh_pct_female + ranking + student_faculty + freshmen, data = women_log)
+model6p_tidy <- model6p %>%
+  tidy(conf.int = TRUE)
+
+```
+
+```{r}
+stargazer(model6p, type = "text")
+```
+
+
+```{r}
+wack <- corr <- women_log %>% 
+  select(-institution)
+
+corr <- women_log %>% 
+  select(-institution) %>% 
+  cor() %>% 
+  round(2)
+
+correlation_table <- as_tibble(corr) %>% 
+  mutate(zap = colnames(wack)) %>% 
+  select(zap, everything())
+
+
+```
+
+
+```{r}
+
+magoo <- correlation_table %>% 
+  filter(zap == 'econ_fac_pct_female' | zap == 'degree_ec_pct_female')
+
+modelA <- lm(degree_ec_pct_female ~ econ_fac_pct_female, data = women_log)
+modelA_tidy <- modelA %>%
+  tidy(conf.int = TRUE)
+
+modelB <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking, data = women_log)
+modelB_tidy <- modelB %>%
+  tidy(conf.int = TRUE)
+
+modelC <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + log(avg_prof_salary), data = women_log)
+modelC_tidy <- modelC %>%
+  tidy(conf.int = TRUE)
+
+modelD <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + fresh_pct_female, data = women_log)
+modelD_tidy <- modelD %>%
+  tidy(conf.int = TRUE)
+
+modelE <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + fresh_pct_female + log(avg_prof_salary), data = women_log)
+modelE_tidy <- modelE %>%
+  tidy(conf.int = TRUE)
+
+stargazer(modelB, modelC, modelD, modelE, type = "text")
+```
+
+
+

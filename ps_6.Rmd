@@ -41,6 +41,9 @@ library(huxtable)
 library(GGally)
 library(gridExtra)
 library(cowplot)
+library(leaps)
+library(caret)
+library(MASS)
 ```
 
 ```{r, echo=FALSE}
@@ -121,7 +124,7 @@ women_summary <- women_base %>%
 
 ```{r, echo=FALSE}
 skim_without_charts(women_summary) %>% 
-  select(-n_missing, -complete_rate)
+  dplyr::select(-n_missing, -complete_rate)
 ```
   
 Data from IPEDS through the National Center for Education Statistics  
@@ -176,7 +179,7 @@ women %>%
 ```{r, include=FALSE}
 women %>%
   arrange(desc(degree_ec_pct_female))%>% 
-  select(institution, degree_ec_pct_female)
+  dplyr::select(institution, degree_ec_pct_female)
 ```
 
 ```{r, echo=FALSE, warning=FALSE}
@@ -225,7 +228,7 @@ women_log %>%
     'fac_fem_ec' = faculty_econ_female,
     'deg_fem_ec' = econ_degrees_female
   ) %>% 
-  select(fac_fem_ec, ln_fac_fem_ec, deg_fem_ec, ln_deg_fem_ec) %>% 
+  dplyr::select(fac_fem_ec, ln_fac_fem_ec, deg_fem_ec, ln_deg_fem_ec) %>% 
   ggpairs(
   ., 
   title = "Scatter Matrix of (Log) Female Econ Faculty and (Log) Female Econ Degrees",
@@ -325,17 +328,17 @@ stargazer(model6p, type = "text")
 
 
 ```{r}
-wack <- corr <- women_log %>% 
-  select(-institution)
+wack <- women_log %>% 
+  dplyr::select(-institution)
 
 corr <- women_log %>% 
-  select(-institution) %>% 
+  dplyr::select(-institution) %>% 
   cor() %>% 
   round(2)
 
 correlation_table <- as_tibble(corr) %>% 
   mutate(zap = colnames(wack)) %>% 
-  select(zap, everything())
+  dplyr::select(zap, everything())
 
 
 ```
@@ -366,8 +369,69 @@ modelE <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + fresh_pct_fe
 modelE_tidy <- modelE %>%
   tidy(conf.int = TRUE)
 
-stargazer(modelB, modelC, modelD, modelE, type = "text")
+modelF <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + fresh_pct_female + log(avg_prof_salary) + log(faculty_econ), data = women_log)
+modelF_tidy <- modelF %>%
+  tidy(conf.int = TRUE)
+
+modelG <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + fresh_pct_female + log(avg_prof_salary) + log(faculty_econ) + acceptance_rate, data = women_log)
+modelG_tidy <- modelG %>%
+  tidy(conf.int = TRUE)
+
+modelH <- lm(degree_ec_pct_female ~ econ_fac_pct_female + ranking + fresh_pct_female + log(avg_prof_salary) + acceptance_rate, data = women_log)
+modelH_tidy <- modelH %>%
+  tidy(conf.int = TRUE)
+
+stargazer(modelE, modelF, modelG, modelH, type = "text")
+```
+
+```{r}
+women_reg <- women_log %>% 
+  dplyr::select(-institution)
+
+full_model <- lm(degree_ec_pct_female ~ ranking + faculty_total + faculty_econ + faculty_econ_female +
+                   freshmen + student_faculty + acceptance_rate + yield +
+                   avg_prof_salary + econ_fac_pct_female, data = women_reg)
+
+step(full_model)
+
+```
+```{r}
+vif <- lm(econ_fac_pct_female ~ ranking + 
+    acceptance_rate + yield + faculty_econ_female, data = women_reg)
+stargazer(vif, type = "text")
+```
+
+```{r}
+model_stepwise <- lm(formula = degree_ec_pct_female ~ ranking + faculty_econ_female + 
+    acceptance_rate + yield + econ_fac_pct_female, data = women_reg)
+
+stargazer(model_stepwise, type = "text")
 ```
 
 
+```{r}
+model_stepwise_ln <- lm(formula = ln_econ_degrees_female ~ ranking + faculty_total + faculty_female + faculty_male + faculty_econ + faculty_econ_female + faculty_econ_male + freshmen + freshmen_econ + stem_degrees + student_faculty + acceptance_rate + yield + yield_female + avg_prof_salary + econ_fac_pct_female + ln_faculty_econ_female, data = women_reg)
+
+step(model_stepwise_ln)
+```
+
+```{r}
+milton <- women_log %>% 
+  dplyr::select(-sat_math_75, -institution, -econ_degrees_female, -ln_econ_degrees_female,
+                -fresh_pct_female, -degree_ec_pct_female, -fresh_ec_pct_female,
+                -econ_fac_pct_female, -fac_pct_female)
+predictors <- colnames(milton)
+
+model_milton <- lm(formula=as.formula(paste(paste('ln_econ_degrees_female','~', sep=''),
+                                     paste(predictors,collapse='+'), sep='')),
+            women_log)
+
+step(model_milton)
+```
+
+```{r}
+women_log %>% 
+  ggplot(aes(faculty_econ, fac_pct_female)) +
+  geom_point()
+```
 
